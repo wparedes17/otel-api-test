@@ -6,9 +6,9 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/you/client/internal/pkg/storage"
-	"github.com/you/client/internal/pkg/trace"
-	"github.com/you/client/internal/users"
+	"github.com/wparedes17/otel-api-test/internal/pkg/storage"
+	"github.com/wparedes17/otel-api-test/internal/pkg/trace"
+	"github.com/wparedes17/otel-api-test/internal/users"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -44,7 +44,7 @@ func main() {
 	rtr.HandleFunc("/api/v1/users", trace.HTTPHandlerFunc(usr.Create, "users_create"))
 
 	// Start HTTP server.
-	if err := http.ListenAndServe(":8080", rtr); err != nil {
+	if err := http.ListenAndServe(":8090", rtr); err != nil {
 		log.Fatalln(err)
 	}
 }
