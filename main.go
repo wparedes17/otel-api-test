@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 
 	"github.com/wparedes17/otel-api-test/internal/pkg/storage"
 	"github.com/wparedes17/otel-api-test/internal/pkg/trace"
@@ -14,12 +16,15 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
+	log.Printf("Waiting for connection...")
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
 
 	// Bootstrap tracer.
 	prv, err := trace.NewProvider(trace.ProviderConfig{
-		JaegerEndpoint: "http://localhost:14268/api/traces",
-		ServiceName:    "client",
+		OtelEndpoint:   "localhost:30080",
+		ServiceName:    "otel-api-client",
 		ServiceVersion: "1.0.0",
 		Environment:    "dev",
 		Disabled:       false,

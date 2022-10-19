@@ -2,21 +2,24 @@ package trace
 
 import (
 	"context"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
-	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
-	"go.opentelemetry.io/otel/trace"
-
 	sdkresource "go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ProviderConfig represents the provider configuration and used to create a new
 // `Provider` type.
 type ProviderConfig struct {
-	JaegerEndpoint string
+	OtelEndpoint   string
 	ServiceName    string
 	ServiceVersion string
 	Environment    string
@@ -38,20 +41,38 @@ func NewProvider(config ProviderConfig) (Provider, error) {
 		return Provider{provider: trace.NewNoopTracerProvider()}, nil
 	}
 
-	exp, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(config.JaegerEndpoint)))
+	ctx := context.Background()
+
+	//Resources
+	res, err := sdkresource.New(ctx,
+		sdkresource.WithAttributes(
+			// the service name used to display traces in backends
+			semconv.ServiceNameKey.String("test-service"),
+		),
+	)
+	if err != nil {
+		return Provider{}, err
+	}
+
+	//connection
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	conn, err := grpc.DialContext(ctx, config.OtelEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	if err != nil {
+		return Provider{}, err
+	}
+
+	exp, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
 
 	if err != nil {
 		return Provider{}, err
 	}
 
+	bsp := sdktrace.NewBatchSpanProcessor(exp)
 	prv := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exp),
-		sdktrace.WithResource(sdkresource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceNameKey.String(config.ServiceName),
-			semconv.ServiceVersionKey.String(config.ServiceVersion),
-			semconv.DeploymentEnvironmentKey.String(config.Environment),
-		)),
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+		sdktrace.WithResource(res),
+		sdktrace.WithSpanProcessor(bsp),
 	)
 
 	otel.SetTracerProvider(prv)
